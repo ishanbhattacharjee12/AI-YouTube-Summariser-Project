@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import HTTPException
 import requests
 from requests import RequestException
+from openai import OpenAI
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     CouldNotRetrieveTranscript,
@@ -19,6 +20,7 @@ from youtube_transcript_api._errors import (
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+load_dotenv()
 
 VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
 YOUTUBE_PATTERNS = [
@@ -27,93 +29,62 @@ YOUTUBE_PATTERNS = [
     re.compile(r"(?:https?://)?(?:www\.)?youtube\.com/shorts/([A-Za-z0-9_-]{11})(?:[?&#/].*)?$"),
 ]
 
-SYSTEM_PROMPT = (
-    "You are an expert content summarizer. Given a YouTube video transcript "
-    "with timestamps, produce a structured summary. Always respond in valid "
-    "JSON only — no markdown, no extra text."
-)
-
 PREFERRED_LANGUAGE_CODES = ["en", "en-US", "en-GB", "hi", "hi-IN"]
 PREFERRED_SUBTITLE_EXTENSIONS = ["json3", "vtt", "srv3", "srv2", "srv1", "ttml"]
 YOUTUBE_VIDEOS_API_URL = "https://www.googleapis.com/youtube/v3/videos"
-GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GEMINI_MODEL = "gemini-2.0-flash"
-STOPWORDS = {
-    "a",
-    "about",
-    "after",
-    "again",
-    "all",
-    "also",
-    "am",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "because",
-    "been",
-    "but",
-    "by",
-    "can",
-    "could",
-    "did",
-    "do",
-    "does",
-    "for",
-    "from",
-    "had",
-    "has",
-    "have",
-    "he",
-    "her",
-    "his",
-    "how",
-    "i",
-    "if",
-    "in",
-    "into",
-    "is",
-    "it",
-    "its",
-    "just",
-    "like",
-    "more",
-    "most",
-    "not",
-    "of",
-    "on",
-    "or",
-    "our",
-    "out",
-    "so",
-    "that",
-    "the",
-    "their",
-    "then",
-    "there",
-    "these",
-    "they",
-    "this",
-    "to",
-    "up",
-    "was",
-    "we",
-    "were",
-    "what",
-    "when",
-    "where",
-    "which",
-    "who",
-    "why",
-    "will",
-    "with",
-    "you",
-    "your",
-}
+MAX_TRANSCRIPT_WORDS = 12000
+TRUNCATION_NOTE = "\n\n[Transcript truncated to first 12,000 words for summarization]"
 
-load_dotenv()
+SYSTEM_PROMPT = (
+    "You are an expert educational content analyst. Summarize YouTube video "
+    "transcripts into detailed, structured notes. Your summaries must be "
+    "comprehensive enough that someone could learn the topic without watching "
+    "the video. Always respond with a valid JSON object only."
+)
+
+
+def _get_openai_client() -> OpenAI:
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def _build_user_prompt(transcript_text: str) -> str:
+    return f"""Analyze this YouTube transcript and return a detailed JSON summary.
+The summary must be comprehensive — if this is educational content,
+the key points should work as study notes.
+
+Return this exact JSON structure:
+{{
+  "title_guess": "Clear descriptive title in 8-10 words",
+  "one_liner": "One complete sentence capturing the core message of the video.",
+  "key_points": [
+    {{
+      "timestamp": "MM:SS",
+      "point": "Detailed complete sentence explaining what is covered here.",
+      "detail": "One additional sentence with a specific fact, example, or insight from this segment."
+    }}
+  ],
+  "takeaways": [
+    "Complete actionable sentence the viewer should remember or act on.",
+    "Complete actionable sentence the viewer should remember or act on.",
+    "Complete actionable sentence the viewer should remember or act on.",
+    "Complete actionable sentence the viewer should remember or act on.",
+    "Complete actionable sentence the viewer should remember or act on."
+  ],
+  "sentiment": "educational | entertaining | motivational | technical | news | other",
+  "difficulty_level": "beginner | intermediate | advanced | general",
+  "estimated_read_time_minutes": 3,
+  "topics": ["topic1", "topic2", "topic3"]
+}}
+
+Rules:
+- key_points: minimum 6, maximum 12 depending on video length
+- takeaways: exactly 5, all complete sentences
+- Every string must be a grammatically complete sentence
+- point + detail together should give enough context to take notes from
+- For technical/educational videos, include specific terms and concepts
+
+TRANSCRIPT:
+{transcript_text}"""
 
 
 def parse_video_id(url_or_id: str) -> str:
@@ -128,7 +99,7 @@ def parse_video_id(url_or_id: str) -> str:
 
     raise HTTPException(
         status_code=422,
-        detail="Invalid YouTube URL or video ID. Use youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID, or an 11-character video ID.",
+        detail="That doesn't look like a valid YouTube URL. Try a link like youtube.com/watch?v=... or youtu.be/...",
     )
 
 
@@ -160,7 +131,6 @@ def _normalize_transcript_entries(entries: Any) -> list[dict[str, Any]]:
         if isinstance(entry, dict):
             normalized_entries.append(entry)
             continue
-
         normalized_entries.append(
             {
                 "text": getattr(entry, "text", ""),
@@ -182,14 +152,9 @@ def _parse_vtt_time(value: str) -> float:
     parts = value.strip().split(":")
     try:
         if len(parts) == 3:
-            hours = int(parts[0])
-            minutes = int(parts[1])
-            seconds = float(parts[2])
-            return hours * 3600 + minutes * 60 + seconds
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
         if len(parts) == 2:
-            minutes = int(parts[0])
-            seconds = float(parts[1])
-            return minutes * 60 + seconds
+            return int(parts[0]) * 60 + float(parts[1])
     except ValueError:
         return 0.0
     return 0.0
@@ -198,45 +163,38 @@ def _parse_vtt_time(value: str) -> float:
 def _parse_json3_subtitles(raw_content: str) -> list[dict[str, Any]]:
     payload = json.loads(raw_content)
     entries: list[dict[str, Any]] = []
-
     for event in payload.get("events", []):
         segments = event.get("segs") or []
         text = _clean_caption_text("".join(segment.get("utf8", "") for segment in segments))
         if not text:
             continue
-
         start = float(event.get("tStartMs", 0)) / 1000
         duration = float(event.get("dDurationMs", 0)) / 1000
         entries.append({"text": text, "start": start, "duration": duration})
-
     return entries
 
 
 def _parse_vtt_subtitles(raw_content: str) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     blocks = re.split(r"\n\s*\n", raw_content.replace("\r\n", "\n"))
-
     for block in blocks:
         lines = [line.strip() for line in block.splitlines() if line.strip()]
-        timing_index = next((index for index, line in enumerate(lines) if "-->" in line), None)
+        timing_index = next((i for i, line in enumerate(lines) if "-->" in line), None)
         if timing_index is None:
             continue
-
         timing = lines[timing_index]
         start_raw, end_raw = [part.strip().split()[0] for part in timing.split("-->", 1)]
         start = _parse_vtt_time(start_raw)
         end = _parse_vtt_time(end_raw)
-        text = _clean_caption_text(" ".join(lines[timing_index + 1 :]))
+        text = _clean_caption_text(" ".join(lines[timing_index + 1:]))
         if text:
             entries.append({"text": text, "start": start, "duration": max(0.0, end - start)})
-
     return entries
 
 
 def _fetch_subtitle_entries(subtitle_url: str, extension: str) -> list[dict[str, Any]]:
     response = requests.get(subtitle_url, timeout=20)
     response.raise_for_status()
-
     if extension == "json3":
         return _parse_json3_subtitles(response.text)
     return _parse_vtt_subtitles(response.text)
@@ -297,28 +255,21 @@ def _get_youtube_video_status(video_id: str) -> Optional[dict[str, Any]]:
 
     response = requests.get(
         YOUTUBE_VIDEOS_API_URL,
-        params={
-            "part": "snippet,status,contentDetails",
-            "id": video_id,
-            "key": api_key,
-        },
+        params={"part": "snippet,status,contentDetails", "id": video_id, "key": api_key},
         timeout=15,
     )
     if response.status_code in {400, 401, 403}:
         return {
             "exists": None,
-            "message": "The configured YouTube API key could not be used. Enable YouTube Data API v3 for the Google Cloud project and check key restrictions/quota.",
+            "message": "The configured YouTube API key could not be used.",
         }
     response.raise_for_status()
-    payload = response.json()
-    items = payload.get("items", [])
-
+    items = response.json().get("items", [])
     if not items:
         return {
             "exists": False,
-            "message": "The YouTube Data API could not find this video. It may be private, deleted, region-blocked, or unavailable.",
+            "message": "This video may be private, deleted, or region-blocked.",
         }
-
     item = items[0]
     snippet = item.get("snippet", {})
     status = item.get("status", {})
@@ -327,7 +278,6 @@ def _get_youtube_video_status(video_id: str) -> Optional[dict[str, Any]]:
         "title": snippet.get("title"),
         "channel_title": snippet.get("channelTitle"),
         "privacy_status": status.get("privacyStatus"),
-        "embeddable": status.get("embeddable"),
         "message": "The YouTube Data API can see this video.",
     }
 
@@ -349,8 +299,8 @@ def _diagnostic_message(video_id: str, fallback_message: str) -> str:
 
     title = video_status.get("title") or "this video"
     return (
-        f"{fallback_message} YouTube Data API can see \"{title}\", "
-        "so the video exists, but captions are not exposed to transcript tools."
+        f"{fallback_message} YouTube can see \"{title}\", "
+        "but captions are not accessible for this video."
     )
 
 
@@ -398,7 +348,7 @@ def _get_yt_dlp_status(video_id: str) -> dict[str, Any]:
             "available": False,
             "transcript_count": 0,
             "languages": languages,
-            "message": "No accessible YouTube subtitle tracks were found for this video.",
+            "message": "No accessible subtitle tracks were found for this video.",
         }
 
     language_code, subtitle_data, generated = selected
@@ -420,23 +370,25 @@ def _choose_best_transcript(transcripts: list[Any]) -> tuple[Any, bool]:
     if not transcripts:
         raise ValueError("No transcripts were returned by YouTube.")
 
-    manual_transcripts = [item for item in transcripts if not getattr(item, "is_generated", False)]
-    generated_transcripts = [item for item in transcripts if getattr(item, "is_generated", False)]
+    manual = [t for t in transcripts if not getattr(t, "is_generated", False)]
+    generated = [t for t in transcripts if getattr(t, "is_generated", False)]
 
     for language_code in PREFERRED_LANGUAGE_CODES:
-        for transcript in manual_transcripts:
-            if getattr(transcript, "language_code", "") == language_code:
-                return transcript, False
-        for transcript in generated_transcripts:
-            if getattr(transcript, "language_code", "") == language_code:
-                return transcript, False
+        for t in manual:
+            if getattr(t, "language_code", "") == language_code:
+                return t, False
+        for t in generated:
+            if getattr(t, "language_code", "") == language_code:
+                return t, False
 
     english_translatable = next(
         (
-            transcript
-            for transcript in transcripts
-            if getattr(transcript, "is_translatable", False)
-            and any(language.get("language_code") == "en" for language in getattr(transcript, "translation_languages", []))
+            t for t in transcripts
+            if getattr(t, "is_translatable", False)
+            and any(
+                lang.get("language_code") == "en"
+                for lang in getattr(t, "translation_languages", [])
+            )
         ),
         None,
     )
@@ -459,51 +411,21 @@ def get_transcript_status(url_or_id: str) -> dict[str, Any]:
             "is_generated": getattr(selected_transcript, "is_generated", None),
             "is_translated": is_translated,
             "transcript_count": len(transcripts),
-            "languages": [_transcript_label(transcript) for transcript in transcripts],
+            "languages": [_transcript_label(t) for t in transcripts],
             "message": "Subtitles are available and can be summarized.",
         }
     except (TranscriptsDisabled, NoTranscriptFound, ValueError):
         try:
             return _get_yt_dlp_status(video_id)
-        except DownloadError as exc:
-            message = _diagnostic_message(video_id, f"YouTube could not provide this video to the app: {exc}")
-            return {
-                "video_id": video_id,
-                "available": False,
-                "transcript_count": 0,
-                "languages": [],
-                "message": message,
-            }
-        except (RequestException, ValueError):
+        except (DownloadError, RequestException, ValueError):
             message = _diagnostic_message(video_id, "No accessible YouTube captions were found for this video.")
-            return {
-                "video_id": video_id,
-                "available": False,
-                "transcript_count": 0,
-                "languages": [],
-                "message": message,
-            }
+            return {"video_id": video_id, "available": False, "transcript_count": 0, "languages": [], "message": message}
     except (CouldNotRetrieveTranscript, VideoUnavailable):
         try:
             return _get_yt_dlp_status(video_id)
-        except DownloadError as exc:
-            message = _diagnostic_message(video_id, f"YouTube could not provide this video to the app: {exc}")
-            return {
-                "video_id": video_id,
-                "available": False,
-                "transcript_count": 0,
-                "languages": [],
-                "message": message,
-            }
-        except (RequestException, ValueError):
+        except (DownloadError, RequestException, ValueError):
             message = _diagnostic_message(video_id, "YouTube did not allow transcript access for this video.")
-            return {
-                "video_id": video_id,
-                "available": False,
-                "transcript_count": 0,
-                "languages": [],
-                "message": message,
-            }
+            return {"video_id": video_id, "available": False, "transcript_count": 0, "languages": [], "message": message}
     except RequestException:
         return {
             "video_id": video_id,
@@ -523,9 +445,8 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
         raise HTTPException(
             status_code=429,
             detail=(
-                "YouTube is blocking transcript requests from this network/session. "
-                "Try again later, switch networks, or run from a normal home network. "
-                "The app code is working, but YouTube refused transcript access."
+                "YouTube is blocking transcript requests from this network. "
+                "Try again in a few minutes, or try from a different network."
             ),
         ) from None
     except (TranscriptsDisabled, NoTranscriptFound, ValueError):
@@ -533,39 +454,27 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
         except DownloadError as exc:
-            message = _diagnostic_message(video_id, f"YouTube could not provide this video to the app: {exc}")
-            raise HTTPException(
-                status_code=400,
-                detail=message,
-            ) from None
+            message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
+            raise HTTPException(status_code=400, detail=message) from None
         except (RequestException, ValueError):
             message = _diagnostic_message(
                 video_id,
-                "No accessible YouTube captions were found for this video. The app can summarize manual captions, auto-generated captions, and translated captions when YouTube exposes them.",
+                "No captions found for this video. Try a video with manually-added or auto-generated subtitles.",
             )
-            raise HTTPException(
-                status_code=400,
-                detail=message,
-            ) from None
+            raise HTTPException(status_code=400, detail=message) from None
     except (CouldNotRetrieveTranscript, VideoUnavailable):
         try:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
         except DownloadError as exc:
-            message = _diagnostic_message(video_id, f"YouTube could not provide this video to the app: {exc}")
-            raise HTTPException(
-                status_code=400,
-                detail=message,
-            ) from None
+            message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
+            raise HTTPException(status_code=400, detail=message) from None
         except (RequestException, ValueError):
             message = _diagnostic_message(
                 video_id,
-                "YouTube did not allow transcript access for this video. Try a public video with visible captions/subtitles.",
+                "YouTube blocked transcript access for this video. Try a public video with visible captions.",
             )
-            raise HTTPException(
-                status_code=400,
-                detail=message,
-            ) from None
+            raise HTTPException(status_code=400, detail=message) from None
     except RequestException as exc:
         raise HTTPException(
             status_code=400,
@@ -575,15 +484,8 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
         try:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
-        except DownloadError as fallback_exc:
-            message = _diagnostic_message(video_id, f"YouTube could not provide this video to the app: {fallback_exc}")
-            raise HTTPException(status_code=400, detail=message) from exc
-        except (RequestException, ValueError):
-            message = _diagnostic_message(
-                video_id,
-                "Transcript not available for this video.",
-            )
-            raise HTTPException(status_code=400, detail=message) from exc
+        except (DownloadError, RequestException, ValueError) as fallback_exc:
+            raise HTTPException(status_code=400, detail="Transcript not available for this video.") from fallback_exc
 
 
 def chunk_transcript(transcript: list[dict[str, Any]], chunk_seconds: int = 300) -> str:
@@ -599,51 +501,24 @@ def chunk_transcript(transcript: list[dict[str, Any]], chunk_seconds: int = 300)
         text = str(entry.get("text", "")).replace("\n", " ").strip()
         if not text:
             continue
-
         if current_text and start - current_start >= chunk_seconds:
-            chunks.append(
-                {
-                    "timestamp": _format_timestamp(current_start),
-                    "text": " ".join(current_text),
-                }
-            )
+            chunks.append({"timestamp": _format_timestamp(current_start), "text": " ".join(current_text)})
             current_start = start
             current_text = []
-
         current_text.append(text)
 
     if current_text:
-        chunks.append(
-            {
-                "timestamp": _format_timestamp(current_start),
-                "text": " ".join(current_text),
-            }
-        )
+        chunks.append({"timestamp": _format_timestamp(current_start), "text": " ".join(current_text)})
 
     return "\n\n".join(f"[{chunk['timestamp']}]\n{chunk['text']}" for chunk in chunks)
 
 
-def _build_user_prompt(transcript_text: str) -> str:
-    return f"""
-Summarize this YouTube transcript. Return ONLY a JSON object:
-{{
-  "title_guess": "inferred video topic in ≤10 words",
-  "one_liner": "single sentence capturing the core idea",
-  "key_points": [
-    {{"timestamp": "MM:SS", "point": "concise insight from this segment"}}
-  ],
-  "takeaways": ["actionable takeaway 1", "takeaway 2"],
-  "sentiment": "educational | entertaining | motivational | technical | other",
-  "estimated_read_time_minutes": <integer>
-}}
-
-TRANSCRIPT (with timestamps):
-{transcript_text}
-""".strip()
-
-
-def _build_gemini_prompt(transcript_text: str) -> str:
-    return f"{SYSTEM_PROMPT}\n\n{_build_user_prompt(transcript_text)}"
+def _guard_transcript_length(transcript_text: str) -> str:
+    words = transcript_text.split()
+    if len(words) <= MAX_TRANSCRIPT_WORDS:
+        return transcript_text
+    truncated = " ".join(words[:MAX_TRANSCRIPT_WORDS])
+    return truncated + TRUNCATION_NOTE
 
 
 def _extract_json(raw_content: str) -> dict[str, Any]:
@@ -656,222 +531,79 @@ def _extract_json(raw_content: str) -> dict[str, Any]:
 
 def _validate_summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
     required_fields = {
-        "title_guess",
-        "one_liner",
-        "key_points",
-        "takeaways",
-        "sentiment",
-        "estimated_read_time_minutes",
+        "title_guess", "one_liner", "key_points", "takeaways",
+        "sentiment", "difficulty_level", "estimated_read_time_minutes", "topics",
     }
     missing = required_fields - payload.keys()
     if missing:
         raise ValueError(f"Missing fields: {', '.join(sorted(missing))}")
+
+    # Validate and normalize timestamps on key_points
+    ts_pattern = re.compile(r"^\d{2,}:\d{2}$")
+    for point in payload.get("key_points", []):
+        if not ts_pattern.match(point.get("timestamp", "")):
+            point["timestamp"] = "00:00"
+        if "detail" not in point:
+            point["detail"] = ""
+
     return payload
 
 
-def _split_transcript_chunks(transcript_text: str) -> list[dict[str, str]]:
-    chunks: list[dict[str, str]] = []
-    matches = list(re.finditer(r"^\[(\d{2,}:\d{2})\]\n", transcript_text, flags=re.MULTILINE))
-
-    for index, match in enumerate(matches):
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(transcript_text)
-        text = transcript_text[start:end].strip()
-        if text:
-            chunks.append({"timestamp": match.group(1), "text": text})
-
-    if not chunks and transcript_text.strip():
-        chunks.append({"timestamp": "00:00", "text": transcript_text.strip()})
-    return chunks
-
-
-def _split_sentences(text: str) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    return [sentence.strip() for sentence in sentences if len(sentence.strip()) > 30]
-
-
-def _keywords(text: str) -> list[str]:
-    words = re.findall(r"[A-Za-z][A-Za-z0-9'-]{2,}", text.lower())
-    return [word for word in words if word not in STOPWORDS and not word.isdigit()]
-
-
-def _sentence_score(sentence: str, frequencies: dict[str, int]) -> float:
-    words = _keywords(sentence)
-    if not words:
-        return 0.0
-    return sum(frequencies.get(word, 0) for word in words) / max(8, len(words))
-
-
-def _best_sentence(text: str, frequencies: dict[str, int]) -> str:
-    sentences = _split_sentences(text)
-    if not sentences:
-        return text[:220].strip()
-    return max(sentences, key=lambda sentence: _sentence_score(sentence, frequencies))[:260].strip()
-
-
-def _estimate_sentiment(text: str) -> str:
-    lowered = text.lower()
-    if any(word in lowered for word in ["tutorial", "learn", "explain", "guide", "course", "lesson"]):
-        return "educational"
-    if any(word in lowered for word in ["code", "api", "python", "javascript", "model", "data", "system"]):
-        return "technical"
-    if any(word in lowered for word in ["motivation", "mindset", "success", "improve", "growth"]):
-        return "motivational"
-    if any(word in lowered for word in ["funny", "story", "music", "movie", "game", "entertain"]):
-        return "entertaining"
-    return "educational"
-
-
-def _local_summarize_transcript(transcript_text: str) -> dict[str, Any]:
-    chunks = _split_transcript_chunks(transcript_text)
-    full_text = " ".join(chunk["text"] for chunk in chunks)
-    words = _keywords(full_text)
-    frequencies: dict[str, int] = {}
-    for word in words:
-        frequencies[word] = frequencies.get(word, 0) + 1
-
-    ranked_keywords = sorted(frequencies, key=frequencies.get, reverse=True)
-    title_words = ranked_keywords[:6] or ["Video", "Summary"]
-    title_guess = " ".join(word.capitalize() for word in title_words[:6])
-
-    target_points = min(10, max(5, len(chunks)))
-    if len(chunks) <= target_points:
-        selected_chunks = chunks
-    else:
-        step = (len(chunks) - 1) / max(1, target_points - 1)
-        indexes = sorted({round(index * step) for index in range(target_points)})
-        selected_chunks = [chunks[index] for index in indexes]
-
-    key_points = [
-        {
-            "timestamp": chunk["timestamp"],
-            "point": _best_sentence(chunk["text"], frequencies),
-        }
-        for chunk in selected_chunks
-    ]
-
-    top_sentences = sorted(
-        _split_sentences(full_text),
-        key=lambda sentence: _sentence_score(sentence, frequencies),
-        reverse=True,
-    )
-    one_liner = (
-        top_sentences[0][:220].strip()
-        if top_sentences
-        else "This video discusses " + ", ".join(ranked_keywords[:5]) + "."
-    )
-
-    takeaways = []
-    for sentence in top_sentences[1:8]:
-        takeaway = sentence[:180].strip()
-        if takeaway and takeaway not in takeaways:
-            takeaways.append(takeaway)
-        if len(takeaways) == 4:
-            break
-
-    while len(takeaways) < 3:
-        keyword = ranked_keywords[len(takeaways)] if len(ranked_keywords) > len(takeaways) else "main idea"
-        takeaways.append(f"Review the section on {keyword} and connect it to the video's main message.")
-
-    estimated_read_time = max(1, round(len(full_text.split()) / 220))
-
-    return {
-        "title_guess": title_guess[:80],
-        "one_liner": one_liner,
-        "key_points": key_points,
-        "takeaways": takeaways[:5],
-        "sentiment": _estimate_sentiment(full_text),
-        "estimated_read_time_minutes": estimated_read_time,
-    }
-
-
-def _call_gemini(prompt: str) -> str:
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("YOUTUBE_API_KEY")
-    if not api_key or api_key in {"your_google_ai_studio_api_key_here", "your_youtube_api_key_here"}:
-        raise HTTPException(
-            status_code=500,
-            detail="GEMINI_API_KEY is not configured. Add your Google AI Studio API key to .env.",
-        )
-
-    url = GEMINI_API_URL_TEMPLATE.format(model=GEMINI_MODEL)
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}],
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 1500,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    try:
-        response = requests.post(url, params={"key": api_key}, json=payload, timeout=60)
-    except RequestException as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Network error while contacting Gemini. Check your internet connection and try again.",
-        ) from exc
-
-    if response.status_code in {400, 401, 403}:
-        raise HTTPException(
-            status_code=500,
-            detail="Gemini rejected the API key or request. Make sure this is a Google AI Studio key with Gemini API access enabled.",
-        )
-    if response.status_code == 429:
-        raise HTTPException(
-            status_code=429,
-            detail="Gemini rate limit reached. Wait a minute and try again.",
-        )
-    if not response.ok:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gemini request failed with status {response.status_code}.",
-        )
-
-    data = response.json()
-    candidates = data.get("candidates") or []
-    if not candidates:
-        raise HTTPException(status_code=500, detail="Gemini returned no summary candidates.")
-
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(part.get("text", "") for part in parts).strip()
-    if not text:
-        raise HTTPException(status_code=500, detail="Gemini returned an empty summary.")
-    return text
-
-
 def summarize_transcript(transcript_text: str) -> dict[str, Any]:
-    prompt = _build_gemini_prompt(transcript_text)
-    try:
-        first_content = _call_gemini(prompt)
-    except HTTPException:
-        return _local_summarize_transcript(transcript_text)
+    guarded_text = _guard_transcript_length(transcript_text)
+    user_prompt = _build_user_prompt(guarded_text)
+    client = _get_openai_client()
 
     try:
-        return _validate_summary_payload(_extract_json(first_content))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            max_tokens=4000,
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+    except Exception as exc:
+        error_msg = str(exc)
+        if "authentication" in error_msg.lower() or "api_key" in error_msg.lower():
+            raise HTTPException(status_code=500, detail="OpenAI API key is invalid or expired. Check your .env file.") from exc
+        if "rate_limit" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="OpenAI rate limit reached. Please wait a moment and try again.") from exc
+        raise HTTPException(status_code=500, detail="Failed to reach the AI service. Check your internet connection and try again.") from exc
+
+    raw_content = response.choices[0].message.content or ""
+
+    try:
+        return _validate_summary_payload(_extract_json(raw_content))
     except (json.JSONDecodeError, ValueError):
+        # Repair pass — only send the malformed JSON, not the full transcript
         repair_prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
-            "Fix this response so it is valid JSON only and matches the requested schema exactly. "
-            "Do not include markdown or explanation.\n\n"
-            f"Original request:\n{_build_user_prompt(transcript_text)}\n\n"
-            f"Invalid response:\n{first_content}"
+            "The following JSON is malformed or missing required fields. "
+            "Fix it so it is valid JSON matching the requested schema exactly. "
+            "Do not include markdown, explanation, or extra text. "
+            "Required fields: title_guess, one_liner, key_points (list with timestamp/point/detail), "
+            "takeaways (list of 5 strings), sentiment, difficulty_level, estimated_read_time_minutes (int), topics (list).\n\n"
+            f"Malformed JSON:\n{raw_content}"
         )
         try:
-            repair_content = _call_gemini(repair_prompt)
-        except HTTPException:
-            return _local_summarize_transcript(transcript_text)
-
-        try:
-            return _validate_summary_payload(_extract_json(repair_content))
-        except (json.JSONDecodeError, ValueError) as exc:
+            repair_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=4000,
+                temperature=0.0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": repair_prompt},
+                ],
+            )
+            repaired = repair_response.choices[0].message.content or ""
+            return _validate_summary_payload(_extract_json(repaired))
+        except Exception as exc:
             raise HTTPException(
                 status_code=500,
-                detail="Failed to parse summary JSON from Gemini response.",
+                detail="The AI returned an unexpected response format. Please try again.",
             ) from exc
 
 

@@ -1,26 +1,110 @@
+# ▶ YouTube Video Summarizer
+
+Turn any YouTube video into clean, structured study notes in seconds. Paste a URL and an AI pipeline fetches the transcript, chunks it by timestamp, and uses OpenAI's `gpt-4o-mini` to produce a comprehensive summary — key points, actionable takeaways, topics, and difficulty — rendered in a calm, minimal React interface.
+
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o--mini-412991?logo=openai&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+
+---
+
+## Architecture
+
+```
+   React + Vite (frontend)                    FastAPI (backend)
+  ┌──────────────────────┐   POST /summarize  ┌──────────────────────────┐
+  │  SearchBar           │ ─────────────────► │  1. parse video_id       │
+  │  LoadingState        │   { url }          │  2. fetch transcript     │
+  │  SummaryCard         │                    │     (yt-transcript-api   │
+  │    ├ KeyPoints       │                    │      → yt-dlp fallback)  │
+  │    └ Takeaways       │ ◄───────────────── │  3. chunk by ~5 min      │
+  │                      │   { video_id,      │  4. guard 12k words      │
+  │                      │     thumbnail_url, │  5. OpenAI gpt-4o-mini    │
+  │                      │     processing,    │         │                │
+  │                      │     summary }      │         ▼                │
+  └──────────────────────┘                    │   structured JSON        │
+                                              └──────────────────────────┘
+```
+
+---
+
+## How it works
+
+1. **URL** — User pastes a YouTube link. The frontend validates it client-side; the backend re-parses and sanitizes the video ID.
+2. **Transcript** — `youtube-transcript-api` pulls captions, falling back to `yt-dlp` for auto-generated or translated subtitles when needed.
+3. **Chunking** — The transcript is grouped into ~5-minute segments with `MM:SS` timestamps so the model can cite where each point comes from.
+4. **Guard** — Transcripts over 12,000 words are truncated (with a note) to stay within token limits and avoid overflow on long videos.
+5. **GPT-4o-mini** — The chunked transcript is sent to OpenAI with `response_format=json_object`, returning a strict JSON schema. A lightweight repair pass fixes malformed JSON without re-sending the full transcript.
+6. **Structured JSON** — title, one-liner, 6–12 key points (each with a detail), exactly 5 takeaways, sentiment, difficulty, read time, and topics.
+7. **React UI** — Rendered as a thumbnail header, clickable timestamp cards (deep-linking into the video), a takeaways checklist, and topic pills — with a one-click "Copy Notes" export.
+
+---
+
+## Tech Stack
+
+| Layer       | Technology                                          |
+|-------------|-----------------------------------------------------|
+| Backend     | Python 3.11+, FastAPI, Uvicorn                       |
+| AI          | OpenAI `gpt-4o-mini` (`max_tokens=4000`, `temp=0.3`) |
+| Transcripts | `youtube-transcript-api` + `yt-dlp` fallback        |
+| Frontend    | React 18, Vite, pure CSS (no UI framework)          |
+| Hardening   | `slowapi` rate limiting, startup env validation, scoped CORS |
+
+---
+
 ## Setup
-1. Clone repo
-2. `python3 -m venv venv && source venv/bin/activate` (Windows: `venv\Scripts\activate`)
-3. `pip install -r requirements.txt`
-4. Copy `.env.example` → `.env`, add your Google AI Studio key
 
-`GEMINI_API_KEY` enables AI summaries with Google Gemini. If Gemini is rate-limited or unavailable, the app automatically falls back to a free local extractive summarizer so the demo still runs. `YOUTUBE_API_KEY` is optional and is used only to diagnose whether a video is unavailable/private/deleted when transcript tools cannot access captions. If you use the same Google key for both, put it in both variables.
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- An OpenAI API key
 
-## Run
-`uvicorn main:app --reload`
-Open http://localhost:8000
+### 1. Backend
 
-Or run everything with:
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
-`./run.sh`
+cp .env.example .env                # then add your OPENAI_API_KEY
+uvicorn main:app --reload --port 8000
+```
 
-## How It Works
-The app accepts a YouTube URL or video ID, validates it, extracts the 11-character video ID, and fetches captions through `youtube-transcript-api`. If that fails, it falls back to `yt-dlp` for manual and auto-generated subtitle tracks. It prefers English transcripts, then Hindi, then translated English when available, then falls back to the first available language. Transcript entries are grouped into roughly five-minute timestamped chunks so the final summary can point back to useful moments in the video.
+The backend validates `OPENAI_API_KEY` on startup and refuses to boot if it's missing or malformed.
 
-Those chunks are sent to Google Gemini with a strict JSON-only prompt using `gemini-2.0-flash`. The backend validates and repairs the JSON response if needed, then falls back to a local extractive summarizer if Gemini is unavailable or rate-limited. The API adds metadata like the video ID and processing time and returns it to the vanilla HTML/CSS/JS frontend for rendering with thumbnail, key-point timestamp links, takeaways, and clipboard-friendly formatted text. If a YouTube API key is configured, the backend also uses YouTube Data API as a diagnostic layer to explain unavailable/private videos more clearly.
+`.env` keys:
 
-## Notes
-- Works only on videos with auto-generated or manual captions
-- Gemini API key gives better summaries; local fallback works without paid APIs
-- YouTube API key is optional for diagnostics
-- Processing time ~5–15 seconds depending on video length
+| Variable          | Description                                          |
+|-------------------|------------------------------------------------------|
+| `OPENAI_API_KEY`  | Your OpenAI key (must start with `sk-`).             |
+| `ALLOWED_ORIGINS` | Comma-separated CORS origins (defaults to localhost).|
+
+### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the printed Vite URL (default http://localhost:5173). Vite proxies `/summarize`, `/transcript-status`, and `/health` to the backend on port 8000, so no CORS config is needed in development.
+
+---
+
+## Screenshot
+
+<!-- Add a screenshot of the app here, e.g. ![Screenshot](docs/screenshot.png) -->
+_Screenshot placeholder — drop a capture of the summary view here._
+
+---
+
+## Production Notes
+
+- **Rate limiting** — `/summarize` is capped at 10 requests/minute per IP via `slowapi`.
+- **CORS** — Locked to the origins listed in `ALLOWED_ORIGINS`, not `*`.
+- **Input sanitization** — URLs are length-capped and parsed against strict YouTube patterns before any network call.
+- **Token safety** — 12,000-word transcript guard plus a 4,000-token completion budget prevent mid-sentence truncation.
+- **Friendly errors** — All failures surface as readable messages, never raw stack traces.

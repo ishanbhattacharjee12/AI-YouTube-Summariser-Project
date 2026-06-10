@@ -1,0 +1,284 @@
+:root {
+  --bg-primary:    #0d1117;
+  --bg-card:       #161b22;
+  --bg-input:      #21262d;
+  --accent:        #58a6ff;
+  --accent-hover:  #79b8ff;
+  --text-primary:  #e6edf3;
+  --text-secondary:#8b949e;
+  --text-muted:    #6e7681;
+  --border:        #30363d;
+  --success:       #3fb950;
+  --tag-bg:        #1f2937;
+  --timestamp-bg:  #1c2a3a;
+  --timestamp-text:#58a6ff;
+  --error-bg:      rgba(248, 81, 73, 0.08);
+  --error-border:  rgba(248, 81, 73, 0.4);
+  --error-text:    #f85149;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 200ms ease;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: background 200ms ease, transform 200ms ease, opacity 200ms ease,
+    border-color 200ms ease, color 200ms ease, box-shadow 200ms ease;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Hero background glow ──────────────────────────────────────────────── */
+.hero-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    rgba(88, 166, 255, 0.06) 0%,
+    transparent 70%
+  );
+}
+
+/* ── Search bar ────────────────────────────────────────────────────────── */
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 0 18px;
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.15);
+}
+
+.search-button {
+  height: 56px;
+  padding: 0 28px;
+  background: var(--accent);
+  color: #0d1117;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.search-button:not(:disabled):hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+/* ── Feature chips ─────────────────────────────────────────────────────── */
+.feature-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: border-color 200ms ease, color 200ms ease;
+}
+
+.feature-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* ── How-it-works cards ────────────────────────────────────────────────── */
+.step-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+
+.step-card:hover {
+  border-color: #484f58;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Example chips ─────────────────────────────────────────────────────── */
+.example-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 15px;
+  background: var(--tag-bg);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 0.83rem;
+  font-weight: 500;
+}
+
+.example-chip:hover {
+  background: var(--accent);
+  color: #0d1117;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* ── Error box ─────────────────────────────────────────────────────────── */
+.error-box {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  color: var(--error-text);
+  padding: 14px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* ── Entrance animations ───────────────────────────────────────────────── */
+.hero-title-row,
+.hero-tagline {
+  animation: fadeInUp 0.4s ease both;
+}
+
+.hero-tagline {
+  animation-delay: 0.08s;
+}
+
+.stagger {
+  animation: fadeIn 0.4s ease both;
+}
+
+.result-enter {
+  animation: slideUp 0.35s ease both;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+@keyframes progressBar {
+  0%   { width: 5%; }
+  20%  { width: 30%; }
+  50%  { width: 58%; }
+  80%  { width: 80%; }
+  100% { width: 92%; }
+}
+
+/* ── Results two-column layout ─────────────────────────────────────────── */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.summary-left {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+
+/* First section in the right column sits flush with the card top */
+.summary-right > section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-left {
+    position: static;
+    top: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .hiw-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .search-button {
+    padding: 0 18px;
+  }
+}
