@@ -41,3 +41,5 @@ class TranscriptStatusResponse(BaseModel):
     transcript_count: int = 0
     languages: list[str] = []
     message: str
+
+    
