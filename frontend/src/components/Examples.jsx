@@ -1,15 +1,15 @@
 const EXAMPLES = [
   {
-    label: '3Blue1Brown — Neural Networks',
-    url: 'https://www.youtube.com/watch?v=aircAruvnKk',
+    label: 'Why Apple’s M Series Chips Changed Laptops',
+    url: 'https://youtu.be/eFwilHG7L34',
   },
   {
-    label: 'Fireship — JavaScript in 100 Seconds',
-    url: 'https://www.youtube.com/watch?v=DHjqpvDnNGE',
+    label: 'The Art Of Winning In Tech',
+    url: 'https://youtu.be/4MAupwjl3pc',
   },
   {
-    label: 'Lex Fridman — AI Podcast Clip',
-    url: 'https://www.youtube.com/watch?v=cdiD-9MMpb0',
+    label: 'Why You Are Losing Control Of Your Brain',
+    url: 'https://youtu.be/H86iO0mtsDI',
   },
 ]
 
