@@ -441,6 +441,14 @@ def get_transcript_status(url_or_id: str) -> dict[str, Any]:
 
 
 def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
+    # 1. Check Demo Cache
+    cache_path = os.path.join(os.path.dirname(__file__), "demo_cache", f"{video_id}.json")
+    if os.path.exists(cache_path):
+        logger.info(f"Using cached demo transcript for {video_id}")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    # 2. Live Fetch
     try:
         transcripts = _list_transcripts(video_id)
         transcript, _is_translated = _choose_best_transcript(transcripts)
@@ -457,8 +465,8 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
                 raise HTTPException(
                     status_code=429,
                     detail=(
-                        "YouTube is aggressively blocking transcript requests from this cloud server. "
-                        "Please try again later or host the backend on a different network."
+                        "Live extraction is currently throttled by YouTube's anti-bot system. "
+                        "However, the AI Summarizer is fully functional! Please click one of the Example Videos below to see the AI in action."
                     ),
                 ) from None
             message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
