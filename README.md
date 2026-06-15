@@ -76,9 +76,17 @@ This project is configured to be easily deployed on modern cloud platforms using
 - **Backend (Render)**: Utilizes the `render.yaml` Blueprint for 1-click deployment. Automatically installs dependencies via `requirements.txt` and starts the Uvicorn server bound to `$PORT`.
 
 **Known Deployment Limitations**:
-- **YouTube IP Blocking (Important)**: Free-tier cloud providers like Render and AWS are frequently blacklisted by YouTube for scraping. The backend uses `yt-dlp` client spoofing to bypass these blocks, but if YouTube aggressively blocks the datacenter, you may see a `429` error. **The most reliable fix for this is hosting the backend on a dedicated VPS (like DigitalOcean or Hetzner) instead of a shared PaaS, or utilizing a paid proxy service.**
-- *Render Spin-Down*: The server spins down after 15 minutes of inactivity. Initial requests after a spin-down may take ~30-50 seconds to complete while the server cold-boots.
-- *OpenAI Tokens*: Processing very long videos may consume significant tokens depending on your billing limits. Transcripts are currently capped to prevent large bills.
+- **YouTube IP Blocking (Important)**: Free-tier cloud providers like Render and Heroku are frequently blacklisted by YouTube for scraping. Even with `yt-dlp` spoofing, you may see a `Sign in to confirm you're not a bot` or `429` error. 
+- **The Solution**: Host the backend on a dedicated VPS instead of a shared PaaS.
+
+### Moving to a Free VPS (Google Cloud / Oracle Cloud)
+To completely avoid YouTube IP blocks without paying for proxies, deploy the backend to a free VPS (e.g., Google Cloud `e2-micro` or Oracle Cloud ARM). The repository is fully Dockerized.
+
+1. SSH into your VPS and install Docker.
+2. Clone this repository.
+3. Create a `.env` file containing your `OPENAI_API_KEY` and `ALLOWED_ORIGINS`.
+4. Run `docker-compose up -d`.
+5. Point your frontend's `VITE_API_URL` to your new server's IP/Domain!
 
 ---
 
