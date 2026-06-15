@@ -114,10 +114,19 @@ Open the Vite URL (default `http://localhost:5173`). Vite is configured to proxy
 
 ---
 
-## Screenshot
+## Screenshots
 
-![App Screenshot Placeholder](docs/screenshot.png)
-*(Drop a capture of the summary view here)*
+![Loading State](docs/screenshot1.png)
+*Processing a video with real-time status updates.*
+
+![Landing Page](docs/screenshot2.png)
+*Clean, simple interface to quickly summarize any YouTube video.*
+
+![Key Takeaways](docs/screenshot3.png)
+*Automatically generated actionable takeaways.*
+
+![Timestamped Key Points](docs/screenshot4.png)
+*Detailed, timestamped notes that deep-link directly into the video.*
 
 ---
 
