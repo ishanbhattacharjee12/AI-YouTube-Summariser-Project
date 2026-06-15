@@ -75,9 +75,10 @@ This project is configured to be easily deployed on modern cloud platforms using
 - **Frontend (Vercel)**: Natively configured for Vite. A `.env.production` file maps `VITE_API_URL` to the live backend.
 - **Backend (Render)**: Utilizes the `render.yaml` Blueprint for 1-click deployment. Automatically installs dependencies via `requirements.txt` and starts the Uvicorn server bound to `$PORT`.
 
-**Free Tier Limitations**:
-- *Render Backend*: The server spins down after 15 minutes of inactivity. Initial requests after a spin-down may take ~30-50 seconds to complete while the server cold-boots.
-- *OpenAI Tokens*: Processing very long videos may consume significant tokens depending on your billing limits. Transcripts are currently capped at 12,000 words to prevent large bills.
+**Known Deployment Limitations**:
+- **YouTube IP Blocking (Important)**: Free-tier cloud providers like Render and AWS are frequently blacklisted by YouTube for scraping. The backend uses `yt-dlp` client spoofing to bypass these blocks, but if YouTube aggressively blocks the datacenter, you may see a `429` error. **The most reliable fix for this is hosting the backend on a dedicated VPS (like DigitalOcean or Hetzner) instead of a shared PaaS, or utilizing a paid proxy service.**
+- *Render Spin-Down*: The server spins down after 15 minutes of inactivity. Initial requests after a spin-down may take ~30-50 seconds to complete while the server cold-boots.
+- *OpenAI Tokens*: Processing very long videos may consume significant tokens depending on your billing limits. Transcripts are currently capped to prevent large bills.
 
 ---
 

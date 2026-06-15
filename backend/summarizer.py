@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 import re
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -243,6 +246,7 @@ def _get_yt_dlp_info(video_id: str) -> dict[str, Any]:
         "writesubtitles": False,
         "writeautomaticsub": False,
         "noplaylist": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "ios", "web"]}},
     }
     with YoutubeDL(options) as ydl:
         return ydl.extract_info(url, download=False)
@@ -441,11 +445,13 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
         transcripts = _list_transcripts(video_id)
         transcript, _is_translated = _choose_best_transcript(transcripts)
         return _normalize_transcript_entries(transcript.fetch())
-    except (IpBlocked, RequestBlocked, TranscriptsDisabled, NoTranscriptFound, ValueError, CouldNotRetrieveTranscript, VideoUnavailable):
+    except (IpBlocked, RequestBlocked, TranscriptsDisabled, NoTranscriptFound, ValueError, CouldNotRetrieveTranscript, VideoUnavailable) as primary_exc:
+        logger.warning(f"youtube-transcript-api failed for {video_id}: {type(primary_exc).__name__} - {primary_exc}")
         try:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
         except DownloadError as exc:
+            logger.error(f"yt-dlp fallback failed for {video_id}: {exc}")
             error_str = str(exc).lower()
             if "http error 429" in error_str or "sign in to verify" in error_str or "bot" in error_str:
                 raise HTTPException(
@@ -457,22 +463,26 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
                 ) from None
             message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
             raise HTTPException(status_code=400, detail=message) from None
-        except (RequestException, ValueError):
+        except (RequestException, ValueError) as exc:
+            logger.error(f"yt-dlp metadata fetch failed for {video_id}: {exc}")
             message = _diagnostic_message(
                 video_id,
                 "No captions found or YouTube blocked access for this video.",
             )
             raise HTTPException(status_code=400, detail=message) from None
     except RequestException as exc:
+        logger.error(f"Network error in primary fetch for {video_id}: {exc}")
         raise HTTPException(
             status_code=400,
             detail="Network error while contacting YouTube. Check your internet connection and try again.",
         ) from exc
     except Exception as exc:
+        logger.error(f"Unexpected error in primary fetch for {video_id}: {exc}")
         try:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
         except (DownloadError, RequestException, ValueError) as fallback_exc:
+            logger.error(f"Unexpected fallback error for {video_id}: {fallback_exc}")
             raise HTTPException(status_code=400, detail="Transcript not available for this video.") from fallback_exc
 
 
