@@ -1,44 +1,55 @@
-# ▶ YouTube Video Summarizer
-
-Turn any YouTube video into clean, structured study notes in seconds. Paste a URL and an AI pipeline fetches the transcript, chunks it by timestamp, and uses OpenAI's `gpt-4o-mini` to produce a comprehensive summary — key points, actionable takeaways, topics, and difficulty — rendered in a calm, minimal React interface.
+# AI YouTube Summarizer
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o--mini-412991?logo=openai&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+
+## Overview
+
+AI YouTube Summarizer is a powerful full-stack application that transforms any YouTube video into clean, structured study notes. By simply pasting a YouTube URL, the application leverages an AI pipeline to fetch the transcript, chunk it intelligently, and generate a comprehensive summary using OpenAI's `gpt-4o-mini`. 
+
+Designed with a calm, minimal React interface, the application extracts key points, actionable takeaways, topics, and difficulty levels in seconds. It serves as an essential tool for students, researchers, and professionals who want to consume video content efficiently.
+
+## Features
+
+- **Instant Summarization**: Get detailed study notes from long YouTube videos in seconds.
+- **Timestamped Key Points**: Deep-linking directly into the video for every summarized key point.
+- **Actionable Takeaways**: Extracts exactly 5 actionable takeaways from the video content.
+- **Smart Chunking Pipeline**: Intelligently groups transcripts into ~5-minute segments for contextual accuracy.
+- **Robust Error Handling**: Graceful fallback to `yt-dlp` for auto-generated/translated subtitles.
+- **Clean UI**: A responsive, pure CSS frontend built on React and Vite.
+- **Security & Rate Limiting**: Features `slowapi` rate limiting and strict CORS/input sanitization.
 
 ---
 
 ## Architecture
 
+The project consists of a **React + Vite** frontend and a **FastAPI** backend, communicating asynchronously.
+
 ```
-   React + Vite (frontend)                    FastAPI (backend)
+   React + Vite (Frontend)                    FastAPI (Backend)
   ┌──────────────────────┐   POST /summarize  ┌──────────────────────────┐
-  │  SearchBar           │ ─────────────────► │  1. parse video_id       │
-  │  LoadingState        │   { url }          │  2. fetch transcript     │
+  │  SearchBar           │ ─────────────────► │  1. Parse video ID       │
+  │  LoadingState        │   { url }          │  2. Fetch transcript     │
   │  SummaryCard         │                    │     (yt-transcript-api   │
   │    ├ KeyPoints       │                    │      → yt-dlp fallback)  │
-  │    └ Takeaways       │ ◄───────────────── │  3. chunk by ~5 min      │
-  │                      │   { video_id,      │  4. guard 12k words      │
+  │    └ Takeaways       │ ◄───────────────── │  3. Chunk by ~5 min      │
+  │                      │   { video_id,      │  4. Guard 12k words      │
   │                      │     thumbnail_url, │  5. OpenAI gpt-4o-mini    │
   │                      │     processing,    │         │                │
   │                      │     summary }      │         ▼                │
-  └──────────────────────┘                    │   structured JSON        │
+  └──────────────────────┘                    │   Structured JSON        │
                                               └──────────────────────────┘
 ```
 
----
-
-## How it works
-
-1. **URL** — User pastes a YouTube link. The frontend validates it client-side; the backend re-parses and sanitizes the video ID.
-2. **Transcript** — `youtube-transcript-api` pulls captions, falling back to `yt-dlp` for auto-generated or translated subtitles when needed.
-3. **Chunking** — The transcript is grouped into ~5-minute segments with `MM:SS` timestamps so the model can cite where each point comes from.
-4. **Guard** — Transcripts over 12,000 words are truncated (with a note) to stay within token limits and avoid overflow on long videos.
-5. **GPT-4o-mini** — The chunked transcript is sent to OpenAI with `response_format=json_object`, returning a strict JSON schema. A lightweight repair pass fixes malformed JSON without re-sending the full transcript.
-6. **Structured JSON** — title, one-liner, 6–12 key points (each with a detail), exactly 5 takeaways, sentiment, difficulty, read time, and topics.
-7. **React UI** — Rendered as a thumbnail header, clickable timestamp cards (deep-linking into the video), a takeaways checklist, and topic pills — with a one-click "Copy Notes" export.
+1. **URL Validation** — Client-side validation; backend re-parses and sanitizes the video ID.
+2. **Transcript Extraction** — Uses `youtube-transcript-api`, falling back to `yt-dlp` for auto-generated or translated subtitles.
+3. **Data Chunking** — The transcript is grouped into 5-minute segments with `MM:SS` timestamps.
+4. **Token Management** — Transcripts over 12,000 words are guarded to stay within token limits.
+5. **AI Processing** — OpenAI strictly formats the response as a JSON object containing the title, key points, takeaways, sentiment, read time, and topics.
 
 ---
 
@@ -46,22 +57,22 @@ Turn any YouTube video into clean, structured study notes in seconds. Paste a UR
 
 | Layer       | Technology                                          |
 |-------------|-----------------------------------------------------|
-| Backend     | Python 3.11+, FastAPI, Uvicorn                       |
-| AI          | OpenAI `gpt-4o-mini` (`max_tokens=4000`, `temp=0.3`) |
-| Transcripts | `youtube-transcript-api` + `yt-dlp` fallback        |
-| Frontend    | React 18, Vite, pure CSS (no UI framework)          |
-| Hardening   | `slowapi` rate limiting, startup env validation, scoped CORS |
+| **Backend** | Python 3.11+, FastAPI, Uvicorn                      |
+| **AI**      | OpenAI `gpt-4o-mini` (`max_tokens=4000`)            |
+| **Parsing** | `youtube-transcript-api`, `yt-dlp`                  |
+| **Frontend**| React 18, Vite, pure CSS                            |
+| **Security**| `slowapi` rate limiting, scoped CORS                |
 
 ---
 
-## Setup
+## Setup & Installation
 
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- An OpenAI API key
+- An active OpenAI API key
 
-### 1. Backend
+### 1. Backend Setup
 
 ```bash
 cd backend
@@ -69,42 +80,54 @@ python -m venv venv
 source venv/bin/activate            # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env                # then add your OPENAI_API_KEY
+# Configure Environment Variables
+cp .env.example .env
+```
+
+Add your `OPENAI_API_KEY` to the newly created `.env` file. The backend will refuse to boot if it's missing or malformed.
+
+```bash
+# Start the Backend Server
 uvicorn main:app --reload --port 8000
 ```
 
-The backend validates `OPENAI_API_KEY` on startup and refuses to boot if it's missing or malformed.
+### 2. Frontend Setup
 
-`.env` keys:
+```bash
+cd frontend
+npm install
+
+# Start the Development Server
+npm run dev
+```
+
+Open the Vite URL (default `http://localhost:5173`). Vite is configured to proxy `/summarize` and `/health` to the backend on port 8000, so no additional CORS configuration is needed in development.
+
+---
+
+## Environment Variables
 
 | Variable          | Description                                          |
 |-------------------|------------------------------------------------------|
 | `OPENAI_API_KEY`  | Your OpenAI key (must start with `sk-`).             |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins (defaults to localhost).|
 
-### 2. Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open the printed Vite URL (default http://localhost:5173). Vite proxies `/summarize`, `/transcript-status`, and `/health` to the backend on port 8000, so no CORS config is needed in development.
-
 ---
 
 ## Screenshot
 
-<!-- Add a screenshot of the app here, e.g. ![Screenshot](docs/screenshot.png) -->
-_Screenshot placeholder — drop a capture of the summary view here._
+![App Screenshot Placeholder](docs/screenshot.png)
+*(Drop a capture of the summary view here)*
 
 ---
 
-## Production Notes
+## Future Improvements
 
-- **Rate limiting** — `/summarize` is capped at 10 requests/minute per IP via `slowapi`.
-- **CORS** — Locked to the origins listed in `ALLOWED_ORIGINS`, not `*`.
-- **Input sanitization** — URLs are length-capped and parsed against strict YouTube patterns before any network call.
-- **Token safety** — 12,000-word transcript guard plus a 4,000-token completion budget prevent mid-sentence truncation.
-- **Friendly errors** — All failures surface as readable messages, never raw stack traces.
+- Add user authentication and saved summaries history.
+- Implement specialized summarization profiles (e.g. "Podcast", "Lecture", "Tutorial").
+- Add multi-language support for transcripts and summaries.
+- Export to Notion and PDF integrations.
+
+## License
+
+This project is licensed under the MIT License.
