@@ -7,9 +7,12 @@
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
+> **🚀 Live Demo:** [https://ai-you-tube-summariser-project.vercel.app](https://ai-you-tube-summariser-project.vercel.app/)  
+> **⚙️ Backend API:** [https://ai-youtube-summariser-project.onrender.com/docs](https://ai-youtube-summariser-project.onrender.com/docs)
+
 ## Overview
 
-AI YouTube Summarizer is a powerful full-stack application that transforms any YouTube video into clean, structured study notes. By simply pasting a YouTube URL, the application leverages an AI pipeline to fetch the transcript, chunk it intelligently, and generate a comprehensive summary using OpenAI's `gpt-4o-mini`. 
+AI-powered YouTube video summarizer that extracts transcripts and generates concise summaries using OpenAI LLMs. It transforms any YouTube video into clean, structured study notes. By simply pasting a YouTube URL, the application leverages an AI pipeline to fetch the transcript, chunk it intelligently, and generate a comprehensive summary using OpenAI's `gpt-4o-mini`. 
 
 Designed with a calm, minimal React interface, the application extracts key points, actionable takeaways, topics, and difficulty levels in seconds. It serves as an essential tool for students, researchers, and professionals who want to consume video content efficiently.
 
@@ -62,6 +65,19 @@ The project consists of a **React + Vite** frontend and a **FastAPI** backend, c
 | **Parsing** | `youtube-transcript-api`, `yt-dlp`                  |
 | **Frontend**| React 18, Vite, pure CSS                            |
 | **Security**| `slowapi` rate limiting, scoped CORS                |
+
+---
+
+## Deployment Information
+
+This project is configured to be easily deployed on modern cloud platforms using their free tiers.
+
+- **Frontend (Vercel)**: Natively configured for Vite. A `.env.production` file maps `VITE_API_URL` to the live backend.
+- **Backend (Render)**: Utilizes the `render.yaml` Blueprint for 1-click deployment. Automatically installs dependencies via `requirements.txt` and starts the Uvicorn server bound to `$PORT`.
+
+**Free Tier Limitations**:
+- *Render Backend*: The server spins down after 15 minutes of inactivity. Initial requests after a spin-down may take ~30-50 seconds to complete while the server cold-boots.
+- *OpenAI Tokens*: Processing very long videos may consume significant tokens depending on your billing limits. Transcripts are currently capped at 12,000 words to prevent large bills.
 
 ---
 
