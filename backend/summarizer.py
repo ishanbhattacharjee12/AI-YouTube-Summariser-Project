@@ -441,38 +441,26 @@ def fetch_transcript(video_id: str) -> list[dict[str, Any]]:
         transcripts = _list_transcripts(video_id)
         transcript, _is_translated = _choose_best_transcript(transcripts)
         return _normalize_transcript_entries(transcript.fetch())
-    except (IpBlocked, RequestBlocked):
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "YouTube is blocking transcript requests from this network. "
-                "Try again in a few minutes, or try from a different network."
-            ),
-        ) from None
-    except (TranscriptsDisabled, NoTranscriptFound, ValueError):
+    except (IpBlocked, RequestBlocked, TranscriptsDisabled, NoTranscriptFound, ValueError, CouldNotRetrieveTranscript, VideoUnavailable):
         try:
             transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
             return transcript
         except DownloadError as exc:
+            error_str = str(exc).lower()
+            if "http error 429" in error_str or "sign in to verify" in error_str or "bot" in error_str:
+                raise HTTPException(
+                    status_code=429,
+                    detail=(
+                        "YouTube is aggressively blocking transcript requests from this cloud server. "
+                        "Please try again later or host the backend on a different network."
+                    ),
+                ) from None
             message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
             raise HTTPException(status_code=400, detail=message) from None
         except (RequestException, ValueError):
             message = _diagnostic_message(
                 video_id,
-                "No captions found for this video. Try a video with manually-added or auto-generated subtitles.",
-            )
-            raise HTTPException(status_code=400, detail=message) from None
-    except (CouldNotRetrieveTranscript, VideoUnavailable):
-        try:
-            transcript, _metadata = _fetch_transcript_with_yt_dlp(video_id)
-            return transcript
-        except DownloadError as exc:
-            message = _diagnostic_message(video_id, f"Could not retrieve this video: {exc}")
-            raise HTTPException(status_code=400, detail=message) from None
-        except (RequestException, ValueError):
-            message = _diagnostic_message(
-                video_id,
-                "YouTube blocked transcript access for this video. Try a public video with visible captions.",
+                "No captions found or YouTube blocked access for this video.",
             )
             raise HTTPException(status_code=400, detail=message) from None
     except RequestException as exc:
