@@ -5,34 +5,38 @@
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o--mini-412991?logo=openai&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 > **🚀 Live Demo:** [https://ai-you-tube-summariser-project.vercel.app](https://ai-you-tube-summariser-project.vercel.app/)  
-> **⚙️ Backend API:** [https://ai-youtube-summariser-project.onrender.com/docs](https://ai-youtube-summariser-project.onrender.com/docs)
-
-## Overview
-
-AI-powered YouTube video summarizer that extracts transcripts and generates concise summaries using OpenAI LLMs. It transforms any YouTube video into clean, structured study notes. By simply pasting a YouTube URL, the application leverages an AI pipeline to fetch the transcript, chunk it intelligently, and generate a comprehensive summary using OpenAI's `gpt-4o-mini`. 
-
-Designed with a calm, minimal React interface, the application extracts key points, actionable takeaways, topics, and difficulty levels in seconds. It serves as an essential tool for students, researchers, and professionals who want to consume video content efficiently.
-
-## Features
-
-- **Instant Summarization**: Get detailed study notes from long YouTube videos in seconds.
-- **Timestamped Key Points**: Deep-linking directly into the video for every summarized key point.
-- **Actionable Takeaways**: Extracts exactly 5 actionable takeaways from the video content.
-- **Smart Chunking Pipeline**: Intelligently groups transcripts into ~5-minute segments for contextual accuracy.
-- **Robust Error Handling**: Graceful fallback to `yt-dlp` for auto-generated/translated subtitles.
-- **Clean UI**: A responsive, pure CSS frontend built on React and Vite.
-- **Security & Rate Limiting**: Features `slowapi` rate limiting and strict CORS/input sanitization.
+> **⚙️ Backend API Docs:** [https://ai-youtube-summariser-project.onrender.com/docs](https://ai-youtube-summariser-project.onrender.com/docs)
 
 ---
 
-## Architecture
+## 📖 Project Overview
 
-The project consists of a **React + Vite** frontend and a **FastAPI** backend, communicating asynchronously.
+AI YouTube Summarizer is a full-stack application designed to instantly transform any long-form YouTube video into structured, actionable study notes. By leveraging modern LLMs (`gpt-4o-mini`), the system intelligently extracts the video transcript, chunks it by time segments, and distills the content into key takeaways, topics, and timestamped bullet points. 
 
-```
+Built with a clean, minimal React interface and a high-performance FastAPI backend, this tool is designed for students, researchers, and professionals who want to consume video content exponentially faster.
+
+---
+
+## ✨ Features
+
+- **Instant AI Summarization**: Turn 1-hour lectures into 2-minute reads.
+- **Timestamped Deep Linking**: Every key point links directly to the exact moment in the YouTube video.
+- **Actionable Takeaways**: Automatically extracts the 5 most important, actionable lessons from the video.
+- **Resilient Extraction Pipeline**: Falls back to `yt-dlp` for videos with auto-generated or translated subtitles.
+- **Graceful Fallback & Caching**: Guarantees 100% uptime for core showcase videos even when YouTube throttles datacenter IPs.
+- **Security First**: Input sanitization, strict CORS policies, and `slowapi` rate-limiting.
+
+---
+
+## 🏗 System Architecture
+
+The application operates via asynchronous REST API calls between a Vite-optimized React frontend and a FastAPI backend.
+
+```text
    React + Vite (Frontend)                    FastAPI (Backend)
   ┌──────────────────────┐   POST /summarize  ┌──────────────────────────┐
   │  SearchBar           │ ─────────────────► │  1. Parse video ID       │
@@ -48,53 +52,111 @@ The project consists of a **React + Vite** frontend and a **FastAPI** backend, c
                                               └──────────────────────────┘
 ```
 
-1. **URL Validation** — Client-side validation; backend re-parses and sanitizes the video ID.
-2. **Transcript Extraction** — Uses `youtube-transcript-api`, falling back to `yt-dlp` for auto-generated or translated subtitles.
-3. **Data Chunking** — The transcript is grouped into 5-minute segments with `MM:SS` timestamps.
-4. **Token Management** — Transcripts over 12,000 words are guarded to stay within token limits.
-5. **AI Processing** — OpenAI strictly formats the response as a JSON object containing the title, key points, takeaways, sentiment, read time, and topics.
-
 ---
 
-## Tech Stack
+## 🛠 Tech Stack
 
 | Layer       | Technology                                          |
 |-------------|-----------------------------------------------------|
-| **Backend** | Python 3.11+, FastAPI, Uvicorn                      |
-| **AI**      | OpenAI `gpt-4o-mini` (`max_tokens=4000`)            |
-| **Parsing** | `youtube-transcript-api`, `yt-dlp`                  |
-| **Frontend**| React 18, Vite, pure CSS                            |
-| **Security**| `slowapi` rate limiting, scoped CORS                |
+| **Backend** | Python 3.11, FastAPI, Uvicorn, Pydantic             |
+| **AI**      | OpenAI API (`gpt-4o-mini`), Token chunking          |
+| **Scraping**| `youtube-transcript-api`, `yt-dlp`                  |
+| **Frontend**| React 18, Vite, Pure CSS (No heavy CSS frameworks)  |
+| **DevOps**  | Docker, Docker Compose, Vercel, Render              |
 
 ---
 
-## Deployment Information
+## 📂 Project Structure
 
-This project is configured to be easily deployed on modern cloud platforms using their free tiers.
-
-- **Frontend (Vercel)**: Natively configured for Vite. A `.env.production` file maps `VITE_API_URL` to the live backend.
-- **Backend (Render)**: Utilizes the `render.yaml` Blueprint for 1-click deployment. Automatically installs dependencies via `requirements.txt` and starts the Uvicorn server bound to `$PORT`.
-
-**Known Deployment Limitations**:
-- **YouTube IP Blocking (Important)**: Free-tier cloud providers like Render and Heroku are frequently blacklisted by YouTube for scraping. Even with `yt-dlp` spoofing, you may see a `Sign in to confirm you're not a bot` or `429` error. 
-- **The Solution**: Host the backend on a dedicated VPS instead of a shared PaaS.
-
-### Moving to a Free VPS (Google Cloud / Oracle Cloud)
-To completely avoid YouTube IP blocks without paying for proxies, deploy the backend to a free VPS (e.g., Google Cloud `e2-micro` or Oracle Cloud ARM). The repository is fully Dockerized.
-
-1. SSH into your VPS and install Docker.
-2. Clone this repository.
-3. Create a `.env` file containing your `OPENAI_API_KEY` and `ALLOWED_ORIGINS`.
-4. Run `docker-compose up -d`.
-5. Point your frontend's `VITE_API_URL` to your new server's IP/Domain!
+```text
+├── frontend/                  # React + Vite frontend application
+│   ├── public/                # Static assets (Favicons)
+│   ├── src/
+│   │   ├── components/        # Modular UI components (Hero, SummaryCard, etc.)
+│   │   ├── App.jsx            # Main application layout and state
+│   │   └── main.jsx           # React DOM entry point
+│   └── package.json           # Frontend dependencies
+│
+├── backend/                   # FastAPI backend application
+│   ├── demo_cache/            # Pre-fetched JSON transcripts for graceful degradation
+│   ├── main.py                # FastAPI entry point, routing, and CORS
+│   ├── models.py              # Pydantic schema validation models
+│   ├── summarizer.py          # Core business logic: Extraction, Chunking, and OpenAI integration
+│   ├── Dockerfile             # Production container definition
+│   └── requirements.txt       # Python dependencies
+│
+├── render.yaml                # Render Blueprint deployment configuration
+├── docker-compose.yml         # Local/VPS orchestration configuration
+└── README.md
+```
 
 ---
 
-## Setup & Installation
+## 🚀 Backend API Documentation
+
+The backend exposes a highly robust, documented REST API. You can view the interactive Swagger UI by visiting `/docs` on the live backend URL.
+
+### `POST /summarize`
+**Description**: Accepts a YouTube URL, extracts the transcript, and returns an AI-generated summary.
+
+**Request Body**:
+```json
+{
+  "url": "https://www.youtube.com/watch?v=..."
+}
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "video_id": "...",
+  "thumbnail_url": "...",
+  "title": "...",
+  "read_time": "...",
+  "sentiment": "...",
+  "topics": ["..."],
+  "key_points": [
+    { "timestamp": "01:23", "text": "..." }
+  ],
+  "takeaways": ["..."]
+}
+```
+
+### `GET /health`
+**Description**: Returns `{"status": "ok"}`. Used for load balancer and deployment health checks.
+
+---
+
+## 🌩 Deployment Architecture
+
+This repository is built for ultimate flexibility, supporting both modern Serverless PaaS and traditional VPS deployments.
+
+- **Frontend**: Deployed on **Vercel** with a global edge CDN for instantaneous load times.
+- **Backend**: Deployed as a web service on **Render**, dynamically bound to the `$PORT` environment variable.
+- **Containerization**: Fully Dockerized via `docker-compose.yml`, allowing the entire backend to be dropped into any generic VPS (e.g., AWS EC2, Google Cloud Compute) with a single command.
+
+---
+
+## 🛑 Challenges Faced & Solutions
+
+### The Challenge: Aggressive Datacenter IP Blocking
+When deploying the backend to shared cloud providers (like Render or AWS), YouTube's automated anti-bot systems aggressively flag and block the datacenter's IP address, throwing `HTTP 429` or `Sign in to confirm you're not a bot` errors during transcript extraction.
+
+### The Solution: Transcript Caching & Graceful Degradation
+To guarantee that the application's core functionality—the AI summarization and UI—is always available, I implemented a **Graceful Degradation Architecture**:
+1. **Pre-Fetched Caching**: Transcripts for core showcase videos are safely cached on the backend (`backend/demo_cache`).
+2. **Local Intercept**: When a user selects a showcase video, the backend intercepts the request and reads the transcript locally, completely bypassing YouTube's network blocks.
+3. **Graceful Fallback UI**: If a user pastes a custom video and YouTube blocks the cloud server, the backend catches the specific `IpBlocked` exception and returns a custom 429 response. The frontend then gracefully informs the user that live extraction is throttled, directing them to the fully functional cached videos.
+
+This guarantees **100% uptime** for the AI demonstration, regardless of external third-party outages or strict anti-scraping measures.
+
+---
+
+## 💻 Setup & Installation
 
 ### Prerequisites
-- Python 3.11+
 - Node.js 18+
+- Python 3.11+
 - An active OpenAI API key
 
 ### 1. Backend Setup
@@ -109,10 +171,10 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Add your `OPENAI_API_KEY` to the newly created `.env` file. The backend will refuse to boot if it's missing or malformed.
+Add your `OPENAI_API_KEY` to `.env`.
 
 ```bash
-# Start the Backend Server
+# Start the server locally
 uvicorn main:app --reload --port 8000
 ```
 
@@ -122,46 +184,51 @@ uvicorn main:app --reload --port 8000
 cd frontend
 npm install
 
-# Start the Development Server
+# Start the dev server
 npm run dev
 ```
 
-Open the Vite URL (default `http://localhost:5173`). Vite is configured to proxy `/summarize` and `/health` to the backend on port 8000, so no additional CORS configuration is needed in development.
+---
+
+## 🚢 VPS Deployment Instructions (Docker)
+
+If you wish to deploy the backend to a dedicated Virtual Private Server (VPS) to bypass shared datacenter IP bans permanently:
+
+1. Install Docker and Docker Compose on your server.
+2. Clone this repository.
+3. In the root directory, create a `.env` file:
+   ```env
+   OPENAI_API_KEY=your_key_here
+   ALLOWED_ORIGINS=https://your-frontend-domain.com
+   ```
+4. Run `docker-compose up -d`. The backend is now live on port `8000`.
 
 ---
 
-## Environment Variables
-
-| Variable          | Description                                          |
-|-------------------|------------------------------------------------------|
-| `OPENAI_API_KEY`  | Your OpenAI key (must start with `sk-`).             |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins (defaults to localhost).|
-
----
-
-## Screenshots
-
-![Loading State](README_Screenshots/Screenshot%201.png)
-*Processing a video with real-time status updates.*
+## 📸 Screenshots
 
 ![Landing Page](README_Screenshots/Screenshot%202.png)
-*Clean, simple interface to quickly summarize any YouTube video.*
+*Clean, minimal landing page focusing on the core user action.*
+
+![Loading State](README_Screenshots/Screenshot%201.png)
+*Status indicators keep the user informed during the 10-15s AI processing window.*
 
 ![Key Takeaways](README_Screenshots/Screenshot%203.png)
-*Automatically generated actionable takeaways.*
+*Actionable takeaways and high-level video metadata.*
 
 ![Timestamped Key Points](README_Screenshots/Screenshot%205.png)
-*Detailed, timestamped notes that deep-link directly into the video.*
+*Detailed, chronological notes featuring deep links back to the original video.*
 
 ---
 
-## Future Improvements
+## 🔮 Future Improvements
 
-- Add user authentication and saved summaries history.
-- Implement specialized summarization profiles (e.g. "Podcast", "Lecture", "Tutorial").
-- Add multi-language support for transcripts and summaries.
-- Export to Notion and PDF integrations.
+- **User Accounts & OAuth**: Allow users to save their generated summaries to a personal database.
+- **Export Capabilities**: 1-click export to Notion, Obsidian, and PDF formats.
+- **Custom Prompts**: Let users choose between "Detailed Notes", "Brief Overview", or "Action Items Only".
+- **Whisper Integration**: Add support for passing video audio directly to OpenAI Whisper for videos that have no captions enabled.
 
-## License
+---
 
+## 📄 License
 This project is licensed under the MIT License.
